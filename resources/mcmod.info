@@ -1,0 +1,16 @@
+[
+{
+  "modid": "blobjmap",
+  "name": "Block Obj Mapper",
+  "description": "This client sided Mod allows you to map a static obj Model to almost any block in the Game.\n\nTo add new blocks, please use the learn.txt or add the modid.lst to the list directory under [USB DIRECTORY HERE].\n\nAnimated objects are planned to come.",
+  "version": "alpha-1",
+  "mcversion": "${mcversion}",
+  "url": "http://pririor.bplaced.net/mcf/?p=blobjmap",
+  "updateUrl": "",
+  "authorList": ["DosMike, cad435"],
+  "credits": "The Forge and FML guys, All the people writing tutorials",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
