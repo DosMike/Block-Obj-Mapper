@@ -8,4 +8,4 @@ The path for files is always the same,
 
 with a filename that represents the unique identifier for that block (the colon `:` had to be replaced with a underscore)
 
-    IC2_blockGenerator.*
+    MODID_blockName.*
