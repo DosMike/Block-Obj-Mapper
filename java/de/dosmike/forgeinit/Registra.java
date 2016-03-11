@@ -1,6 +1,8 @@
 package de.dosmike.forgeinit;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
 
 import javassist.CannotCompileException;
 import javassist.ClassClassPath;
@@ -8,6 +10,7 @@ import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.CtMethod;
 import javassist.CtNewMethod;
+import javassist.Loader;
 import javassist.NotFoundException;
 import javassist.bytecode.AnnotationsAttribute;
 import javassist.bytecode.ClassFile;
@@ -15,13 +18,15 @@ import javassist.bytecode.ConstPool;
 import javassist.bytecode.annotation.Annotation;
 import net.minecraft.block.Block;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
+import net.minecraft.launchwrapper.Launch;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.world.World;
+import net.minecraft.util.RegistryNamespaced;
 import cpw.mods.fml.client.registry.ClientRegistry;
-import cpw.mods.fml.common.FMLLog;
+import cpw.mods.fml.common.registry.GameData;
 import cpw.mods.fml.common.registry.GameRegistry;
 import de.dosmike.blobjmap.BOMlog;
-import de.dosmike.blobjmap.blocks.CloneableBlock;
+import de.dosmike.blobjmap.RegistryWrapper;
+import de.dosmike.blobjmap.blocks.BlockCloner;
 import de.dosmike.blobjmap.blocks.dummyBlock;
 import de.dosmike.blobjmap.blocks.dummyTileEntity;
 
@@ -29,25 +34,42 @@ public class Registra {
 
 	final static String tpack = dummyBlock.class.getPackage().getName();
 	
-	public static Block bindTE(String modId, Block block, TileEntitySpecialRenderer renderer, /*String cloneConstructor, */Object[] cloneConstValues) {
-		Block result = null;
-		String bpack = null;
-		String tecname = block.getClass().getSimpleName() + "_TileEntity";
-		BOMlog.i("BlockGen", "=== CREATE RENDERER FOR " + block.getUnlocalizedName() + " ===");
+	private static ClassPool cp;
+	
+	public Registra() {
+		new File("BOMpatch/de/dosmike/blobjmap/blocks/").mkdirs();
+		try {
+			Launch.classLoader.addURL(new File("BOMpatch").toURL());
+		} catch (MalformedURLException e3) {
+			e3.printStackTrace();
+		}
+		
 		
 		ClassPool cp = ClassPool.getDefault();
+		Loader myCL = new Loader(Launch.classLoader, cp);
 		//try {
 			//cp.makePackage(BlObjMapper.instance.getClass().getClassLoader(), tpack);
 		cp.insertClassPath(new ClassClassPath(dummyBlock.class));
 		try {
-			cp.appendClassPath("net.minecraft");
-			cp.appendClassPath("aoq");	//obfuscated name for TileEntity
-			cp.appendClassPath("aji");	//obfuscated name for World
-			cp.appendClassPath("net.minecraft.tileentity.TileEntity");
-		} catch (NotFoundException e2) {
+			cp.insertClassPath("net.minecraft");
+			//cp.appendClassPath("aor");	//obfuscated name for TileEntity
+			//cp.getClassLoader().loadClass("aor");
+			//cp.appendClassPath("aji");	//obfuscated name for World
+			cp.insertClassPath("net.minecraft.tileentity.TileEntity");
+			cp.importPackage("net.minecraft.tileentity");
+			cp.getClassLoader().loadClass("net.minecraft.tileentity.TileEntity");
+		} catch (Exception e2) {
 			// TODO Auto-generated catch block
 			e2.printStackTrace();
 		}
+	}
+	
+	public Class<? extends Block> bindTE(String modId, Block block, TileEntitySpecialRenderer renderer) {
+		String rcBaseN = modId + "_" + block.getClass().getSimpleName();
+		Class<? extends Block> result = null;
+		String bpack = null;
+		String tecname = rcBaseN + "_TileEntity";
+		BOMlog.i("BlockGen", "=== CREATE RENDERER FOR " + block.getUnlocalizedName() + " ===");
 		
 		//create new tileEntity class
 		Class<? extends TileEntity> tec;
@@ -57,7 +79,9 @@ public class Registra {
 			CtClass cc = cp.makeClass(tpack + "." + tecname);
 			cc.setSuperclass(cp.getCtClass(dummyTileEntity.class.getName()));
 			//cp.makePackage(cp.getClassLoader(), tpack);
-			tec = cc.toClass();
+			cc.writeFile("BOMpatch");
+			tec = (Class<? extends TileEntity>) Class.forName(cc.getName(), false, Launch.classLoader);
+			//tec = cc.toClass(Launch.classLoader, Launch.class.getProtectionDomain());
 		} catch (Exception e1) {
 			BOMlog.i("BlockGen", "ERROR: Looks like " + block.getUnlocalizedName() + " was obuscated. No class instance could be created.");
 			BOMlog.i("BlockGen", "INFO: If you're trying to mod vanilla block, try to set CCC to deobfuscate names");
@@ -92,7 +116,7 @@ public class Registra {
 		try {
 			CtClass csc = cp.get(block.getClass().getName());
 			//cp.makePackage(cp.getClassLoader(), tpack);
-			cc = cp.makeClass(tpack + ".BOM_"+block.getClass().getSimpleName());
+			cc = cp.makeClass(tpack + ".BOM_"+rcBaseN);
 			cc.setSuperclass(csc);
 			//if (bpack != null) cp.makePackage(cp.getClassLoader(), bpack);
 			BOMlog.i("BlockGen", "Check PGK " + cc.getPackageName());
@@ -112,20 +136,18 @@ public class Registra {
 		BOMlog.i("BlockGen", "Injecting functions to " + block.getUnlocalizedName() + "...");
 		
 		if ((cc=injectMethod("public boolean renderAsNormalBlock() { return false; }", cc)) == null) return null;
-		if ((cc=injectMethod("public aoq createTileEntity(aji world, int i) { System.out.println(\"[BLOBJMAP] Placing Tile entity: " + tec.getName() + "\"); return new " + tec.getName() + "(); }", cc)) == null) return null;
+		if ((cc=injectMethod("public de.dosmike.blobjmap.blocks.dummyTileEntity createTileEntity(aji world, int i) { System.out.println(\"[BLOBJMAP] Placing Tile entity: " + tec.getName() + "\"); return new " + tec.getName() + "(); }", cc)) == null) return null;
 		
-		BOMlog.i("BlockGen", "Replacing existing Block class...");
+		//BOMlog.i("BlockGen", "Replacing existing Block class...");
 		try {
-			Class<? extends Block> ccr = cc.toClass(); //recompile as subclass
-			BOMlog.i("BlockGen", "Check " + ccr.getName() + " > " + ccr.getSuperclass().getName() + " - " + block.getClass().getName() + " - InstanceOf: " + ccr.getSuperclass().getName().equals(block.getClass().getName()) );
+			cc.writeFile("BOMpatch");
+			//Class<? extends Block> ccr = cc.toClass(Launch.classLoader, Launch.class.getProtectionDomain());//cc.toClass(); //recompile as subclass
+			//actually loading the classes into forge
+			Class<? extends Block> tcc = (Class<? extends Block>) Class.forName(cc.getName(), false, Launch.classLoader);
+			BOMlog.i("BlockGen", "Check " + tcc.getName() + " > " + tcc.getSuperclass().getName() + " - " + block.getClass().getName() + " - InstanceOf: " + tcc.getSuperclass().getName().equals(block.getClass().getName()) );
+			BOMlog.i("BlockGen", "Check CL %s > FCL %s", tcc.getClassLoader(), Launch.classLoader);
 			
-			String name = GameRegistry.findUniqueIdentifierFor(block).toString();
-			//String name = block.getUnlocalizedName();
-			//if (name.startsWith("tile.")) name = name.substring(5);
-			//name = modId + ":" + name;
-			BOMlog.i("BlockGen", "Substitute Name: " + name);			
-			
-			result = registerBlockSubstitutionAlias(name, block, ccr, /*cloneConstructor, */cloneConstValues);
+			result = tcc;
 		} catch (CannotCompileException e) {
 			BOMlog.i("BlockGen", "ERROR: Unable to recompile class");
 			e.printStackTrace();
@@ -139,8 +161,8 @@ public class Registra {
 		return result;
 	}
 	
-	private static CtClass injectMethod(String method, CtClass cc) {
-		BOMlog.i("[BLOBJMAP] Injecting " + method);
+	private CtClass injectMethod(String method, CtClass cc) {
+		BOMlog.i("Injecting " + method);
 		try {
 			CtMethod cm = CtNewMethod.make(method, cc);
 			addAnnotation(cc, cm, "Override");
@@ -157,7 +179,7 @@ public class Registra {
 		return cc;
 	}
 	
-	private static void addAnnotation(CtClass cc, CtMethod cm, String annotation) {
+	private void addAnnotation(CtClass cc, CtMethod cm, String annotation) {
 		//add override annotation
 		ClassFile cfile = cc.getClassFile();
         ConstPool cpool = cfile.getConstPool();
@@ -168,31 +190,57 @@ public class Registra {
         cm.getMethodInfo().addAttribute(attr);
 	}
 	
+	public enum RegType { SubstitutionAlias, Reregister, InstanceRegisters }; 
+	public Block registerBlock(RegType type, String blockId, Class<? extends Block> repClass, Object... constructorValues) {
+		Block cbn = Block.getBlockFromName(blockId);
+    	String modId = blockId.substring(0, blockId.indexOf(':'));
+		BOMlog.i("BlockGen", "Substitute Name: " + blockId);		
+		
+		if (type == RegType.SubstitutionAlias)
+			return registerBlockSubstitutionAlias(blockId, cbn, repClass, constructorValues);
+		else if (type == RegType.InstanceRegisters)
+			return registerBlockConstructor(blockId, cbn, repClass, constructorValues);
+		else {
+			BOMlog.i("RegType", "Type 'Reregister' is not yet implemented");
+			return null;
+		}
+	}
+	
 	//this function exists to be able to use subclass casts
-	private static <T extends Block, N extends T> N registerBlockSubstitutionAlias(String name, T block, Class<N> instance, /*String constructor,*/ Object[] constValues) {
+	private <T extends Block, N extends T> N registerBlockSubstitutionAlias(String name, T block, Class<N> instance, Object[] constValues) {
 		try {
-			//Block base = (Block) block;
-			String regName = name.substring(name.indexOf(':')+1);
 			Class<? extends Block> ct = block.getClass();
-			N change = (N)CloneableBlock.clone(block, instance, /*constructor, */constValues);
-			//N change = (N)block;
+			N change = (N)BlockCloner.clone(block, instance, /*constructor, */constValues);
 			GameRegistry.addSubstitutionAlias(name, GameRegistry.Type.BLOCK, change); //TODO WILL TELL, THE WORLD IS CORRUPT :@
-			//GameRegistry.registerBlock(change, regName);
 			return change;
-		//} catch (ExistingSubstitutionException e) {
-		//	co("INFO: This block was already replaced - Skipped!");
-		//	e.printStackTrace();
 		} catch (Exception e) {
 			BOMlog.i("ERROR: Unable to clone Block class");
 			e.printStackTrace();
 		}
 		return null;
 	}
+	private <T extends Block, N extends T> N registerBlockConstructor(String name, T block, Class<N> instance, Object[] constValues) {
+		
+		RegistryNamespaced breg = (RegistryNamespaced)GameData.getBlockRegistry();
+		RegistryWrapper wreg = (RegistryWrapper)breg;
+		int id = wreg.removeEntry(name);
+		N registerBlock = null;
+		try {
+			registerBlock = (N) instance.getConstructors()[0].newInstance(constValues);
+		} catch (Exception e) {
+			e.printStackTrace();
+			if (e.getCause() != null)
+				e.getCause().printStackTrace();
+		}
+		wreg.ensureId(name, id);
+		
+		return registerBlock;
+	}
 	
-	private static String getPackageName(Class clazz) {
+	private String getPackageName(Class clazz) {
 		String cname = clazz.getName();
 		cname = cname.substring(0, cname.lastIndexOf('.'));
-		BOMlog.i("[BLOBJMAP] Will import " + cname);
+		BOMlog.i("Will import " + cname);
 		return cname;
 	}
 }

@@ -7,12 +7,12 @@ import java.lang.reflect.InvocationTargetException;
 import net.minecraft.block.Block;
 import de.dosmike.blobjmap.BOMlog;
 
-public class CloneableBlock {
+public class BlockCloner {
 
-	public static <T extends Block, N extends T>  T clone(T fromBlock, Class<N> toClass,  Object... constructorValues) throws IllegalAccessException,  NoSuchFieldException, InstantiationException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
+	public static <T extends Block, N extends T>  N clone(T fromBlock, Class<N> toClass,  Object... constructorValues) throws IllegalAccessException,  NoSuchFieldException, InstantiationException, IllegalArgumentException, NoSuchMethodException, SecurityException {
 		//Class<? extends Block> toClass = fromBlock.getClass();
 		
-		T toBlock = null;
+		N toBlock = null;
 		boolean foundconst = false;
 		//Constructor<?>[] cons = toClass.getConstructors();
 		//for (Constructor<?> con : cons) {
@@ -28,7 +28,12 @@ public class CloneableBlock {
 		for (Object o : constructorValues) {
 			BOMlog.i("CLONEC", "Argument %s [%s]", o.toString(), o.getClass().getName());
 		}
-		toBlock = (T) con.newInstance(constructorValues);
+		try {
+			toBlock = (N) con.newInstance(constructorValues);
+		} catch (InvocationTargetException ite) {
+			BOMlog.i("CLONEC", "InvocationTargetException caused by:");
+			ite.getCause().printStackTrace();
+		}
 		
 		Field[] fromFields = fromBlock.getClass().getDeclaredFields();
 		Field[]   toFields = toClass.getDeclaredFields();

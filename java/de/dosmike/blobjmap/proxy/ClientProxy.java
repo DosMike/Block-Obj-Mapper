@@ -4,36 +4,36 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 import net.minecraft.block.Block;
 import net.minecraft.util.ResourceLocation;
-import cpw.mods.fml.common.FMLLog;
 import de.dosmike.blobjmap.BOMlog;
 import de.dosmike.blobjmap.BlObjMapper;
 import de.dosmike.blobjmap.blocks.DynamicTileEntityRenderer;
 import de.dosmike.forgeinit.Registra;
+import de.dosmike.forgeinit.Registra.RegType;
 
 public class ClientProxy extends CommonProxy {
 
 	private static final String MODID = BlObjMapper.MODID;
     private static List<DynamicTileEntityRenderer> dter = new LinkedList<DynamicTileEntityRenderer>();
-    static Map<String, Block> replacer = new HashMap<String, Block>();
-    static Map<String, Block> deplacer = new HashMap<String, Block>();
+    private static Registra reg = new Registra(); 
+    //static Map<String, Block> replacer = new HashMap<String, Block>();
+    //static Map<String, Block> deplacer = new HashMap<String, Block>();
     
 	public void scanAndRegister() {
-		//Class<? extends Block> cbn = ClassPool.getDefault().get("net.minecraft.block.BlockGlass").get
-		//wrapBlock("minecraft:glass", Material.glass, false);
+		Class<? extends Block> retval;
 		//Object param1 = getObjectParam("ic2.core.init.InternalName", "blockGenerator");
 		try {
 			Class<? extends Enum> enum1;
 			enum1 = (Class<? extends Enum>) Class.forName("ic2.core.init.InternalName");
-			Object param1 = getEnumVal(enum1, "blockGenerator");
-			BOMlog.i("[BLOBJMAP] Enum Value: %s", param1.toString());
-			wrapBlock("IC2:blockGenerator", param1);
+			//we can't use a enum twice for IC2
+			Object param1 = getEnumVal(enum1, "blockGenerator");	
+			//BOMlog.i("Enum Value: %s", param1.toString());
+			retval = wrapBlock("minecraft:glass");
+			reg.registerBlock(RegType.Reregister, "minecraft:glass", retval, param1);
 		} catch (ClassNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -41,26 +41,17 @@ public class ClientProxy extends CommonProxy {
     }
 	
 	/** returns true on success */
-	private static boolean wrapBlock(String blockId, Object... cloneConstValues) {
+	private static Class<? extends Block> wrapBlock(String blockId) {
     	Block cbn = Block.getBlockFromName(blockId);
     	String modId = blockId.substring(0, blockId.indexOf(':'));
     	
-    	//discover Constructor
-    	String cloneConstructor = cbn.getClass().getConstructors()[0].toString();
-    	
     	DynamicTileEntityRenderer dr = new DynamicTileEntityRenderer(cbn);
     	if (!dr.loadedResources()) {
-    		BOMlog.i("[BLOBJMAP]\n\n\tYour config and resource pack do not match!\n\tMissing files for " + modId + "'s " + blockId + "\n\n");
-    		return false;
+    		BOMlog.i("\n\n\tYour config and resource pack do not match!\n\tMissing files for " + modId + "'s " + blockId + "\n\n");
+    		return null;
     	}
     	dter.add(dr); //keep instance until idc
-		Block exch = Registra.bindTE(modId, cbn, dr, /*cloneConstructor, */cloneConstValues);
-		if (exch != null) {
-			replacer.put(cbn.getUnlocalizedName(), exch);
-			deplacer.put(exch.getUnlocalizedName(), cbn);
-			return true;
-    	}
-		return false;
+		return reg.bindTE(modId, cbn, dr);
 	}
 
 	//Move this in a Utils?
@@ -97,7 +88,7 @@ public class ClientProxy extends CommonProxy {
     			return m.invoke(value);
     		}
     	}
-    	BOMlog.i("BlockGen", "[BLOBJMAP] Unable to resolve value for %s > %s\n\t%s", clazz.getName(), fieldName, value == null ? "The first object needs to be static!" : "Please call a coder!");
+    	BOMlog.i("BlockGen", "Unable to resolve value for %s > %s\n\t%s", clazz.getName(), fieldName, value == null ? "The first object needs to be static!" : "Please call a coder!");
     	return null;
     }
     
